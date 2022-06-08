@@ -17,24 +17,22 @@ public class AxleInfo
 public class CarScript : Agent
 {
     [SerializeField] Transform manager;
+    float collisionTimer = 0f;
     public List<AxleInfo> axleLists;
     public float maxMotorTorque;
     public float maxSteeringAngle;
-
-    public CheckpointManager checkpointManager;
-
-    void Start()
+    Vector3 startingPosition;
+    
+    private void Awake()
     {
- 
+        startingPosition = this.transform.position;
     }
 
-    void Update()
-    {
- 
-    }
+
 
     public override void CollectObservations(VectorSensor sensor)
     {
+        //samochód przed czy za następnym checkpointem
         Vector3 nextCheckpointForward = manager.GetComponent<CheckpointManager>().getNextCheckpoint(this.transform).transform.forward;
         float Dot = Vector3.Dot(transform.forward, nextCheckpointForward);
         sensor.AddObservation(Dot);
@@ -42,33 +40,71 @@ public class CarScript : Agent
 
     public override void Heuristic(in ActionBuffers actionsOut)
     {
-        ActionSegment<float> continuusActions = actionsOut.ContinuousActions;
-        continuusActions[0] = Input.GetAxisRaw("Horizontal");
-        continuusActions[1] = Input.GetAxisRaw("Vertical");
+        ActionSegment<int> discreteActions = actionsOut.DiscreteActions;
+        discreteActions[0] = 0; 
+        if (Input.GetKey(KeyCode.D))
+        {
+            discreteActions[0] = 1;
+        }
+        if (Input.GetKey(KeyCode.A))
+        {
+            discreteActions[0] = 2;
+        }
+
+        discreteActions[1] = 0;
+        if (Input.GetKey(KeyCode.W))
+        {
+            discreteActions[1] = 1;
+        }
+        if (Input.GetKey(KeyCode.S))
+        {
+            discreteActions[1] = 2;
+        }
     }
 
-    public override void OnActionReceived(ActionBuffers actions)
-    {
-        float moveX = actions.ContinuousActions[0];
-        float moveZ = actions.ContinuousActions[1];
 
-        float motor = maxMotorTorque * moveZ;
-        float steering = maxSteeringAngle * moveX;
 
-        foreach (AxleInfo axleInfo in axleLists)
-        {
-            if (axleInfo.steering)
-            {
+    public override void OnActionReceived(ActionBuffers actions){
+        float moveLeftRight = actions.DiscreteActions[0];
+        float moveForwardBackward = actions.DiscreteActions[1];
+        switch (moveLeftRight){
+            case 0:
+                moveLeftRight = 0f;
+                break;
+            case 1:
+                moveLeftRight = 1f;
+                break;
+            case 2:
+                moveLeftRight = -1f;
+                break;
+        }
+
+        switch (moveForwardBackward){
+            case 0:
+                moveForwardBackward = 0f;
+                break;
+            case 1:
+                moveForwardBackward = 1f;
+                break;
+            case 2:
+                moveForwardBackward = -1f;
+                break;
+        }
+
+
+        float motor = maxMotorTorque * moveForwardBackward;
+        float steering = maxSteeringAngle * moveLeftRight;
+
+        foreach (AxleInfo axleInfo in axleLists){
+            if (axleInfo.steering){
                 axleInfo.leftWheel.steerAngle = steering;
                 axleInfo.rightWheel.steerAngle = steering;
             }
-            if (axleInfo.motor)
-            {
+            if (axleInfo.motor){
                 axleInfo.leftWheel.motorTorque = motor;
                 axleInfo.rightWheel.motorTorque = motor;
             }
 
-            //https://answers.unity.com/questions/853476/making-mesh-rotate-with-wheelcollider.html
             axleInfo.leftWheel.transform.localEulerAngles = new Vector3(axleInfo.leftWheel.transform.localEulerAngles.x, axleInfo.leftWheel.steerAngle - axleInfo.leftWheel.transform.localEulerAngles.z, axleInfo.leftWheel.transform.localEulerAngles.z);
             axleInfo.rightWheel.transform.localEulerAngles = new Vector3(axleInfo.rightWheel.transform.localEulerAngles.x, axleInfo.rightWheel.steerAngle - axleInfo.rightWheel.transform.localEulerAngles.z, axleInfo.rightWheel.transform.localEulerAngles.z);
 
@@ -77,10 +113,27 @@ public class CarScript : Agent
         }
     }
 
+    private void OnCollisionStay(Collision collision)
+    {
+
+        if (collision.gameObject.TryGetComponent<Railing>(out Railing railing))
+        {
+            collisionTimer += Time.deltaTime;
+            if (collisionTimer >= 2)
+            {
+                collisionTimer = 0;
+                AddReward(-10.0f);
+                EndEpisode();
+            }
+            AddReward(-5.0f);
+        }
+    }
+
     public override void OnEpisodeBegin()
     {
-        transform.localPosition = Vector3.zero;
-        transform.position = Vector3.zero;
+        GetComponent<Rigidbody>().isKinematic = true;
+        transform.position = startingPosition + new Vector3(Random.Range(-0.5f, 0.5f), 0, 0);
+
         Rigidbody rigiBody = GetComponent<Rigidbody>();
         if (rigiBody)
         {
@@ -103,87 +156,12 @@ public class CarScript : Agent
             }
         }
         GetComponent<Rigidbody>().isKinematic = false;
+
+        manager.GetComponent<CheckpointManager>().ResetIndexes(this.transform);
+       
     }
 
-    
-
-    private void OnTriggerEnter(Collider other)
-    {
-        if(other.TryGetComponent<Finish>(out Finish finish))
-        {
-            AddReward(20.0f);
-            EndEpisode();
-            manager.GetComponent<CheckpointManager>().ResetIndexes();
-        }
-
-        if (other.TryGetComponent<Checkpoint>(out Checkpoint checkpoint))
-        {
-
-            //Vector3 carDirtection = transform.TransformDirection(Vector3.forward);
-            //float dot = Vector3.Dot(carDirtection, attackerDirection.normalized); // the player position should be playerTransform.forward, enemy: attackerTransform.forward)... I think they are already normalized, so you probably won't need the .normalize
 
 
-            /*if (this.transform.position.z - checkpoint.transform.position.z >= 0)
-            {
-                //Debug.Log("positive z, negative reward");
-                AddReward(-10.0f);
-                EndEpisode();
-            }
-            else
-            {
-                //Debug.Log("negative z, positive reward");
-                AddReward(1.0f);
-            }*/
-
-        }
-        Debug.Log("AAAAAAAAAAAAAAAAA");
-        if (other.TryGetComponent<Railing>(out Railing railing))
-        {
-            AddReward(-10.0f);
-            EndEpisode();
-            manager.GetComponent<CheckpointManager>().ResetIndexes();
-        }
-    }
-
-/*    private void OnTriggerExit(Collider other)
-    {
-        *//*        if (other.TryGetComponent<Checkpoint>(out Checkpoint checkpoint))
-                {
-                    if (this.transform.position.z - checkpoint.transform.position.z >= 0)
-                    {
-                        Debug.Log("positive z, leave from front, negative reward");
-                        AddReward(1.0f);
-                        //EndEpisode();
-                    }
-                    else
-                    {
-                        Debug.Log("negative z, leave from back, negative reward");
-                        AddReward(-10.0f);
-                        EndEpisode();
-                    }
-                }*//*
-
-        if (other.TryGetComponent<CheckpointFront>(out CheckpointFront checkpointFront))
-        {
-            AddReward(1.0f);
-            Debug.Log("Left correctly, positive reward");
-            GameObject parent = checkpointFront.gameObject.transform.parent.gameObject;
-            CheckpointBack back = parent.GetComponent<CheckpointBack>();
-            back.gameObject.GetComponent<BoxCollider>().isTrigger = true;
-        }
-    }*/
-
-    private void OnCollisionEnter(Collision collision)
-    {
-        
-    }
-/*    private void OnCollisionStay(Collision collision)
-    {
-        if(collision.gameObject.TryGetComponent<Railing>(out Railing railing))
-        {
-            AddReward(-5.0f);
-            Debug.Log("Negative reward");
-        }
-    }*/
 }
 

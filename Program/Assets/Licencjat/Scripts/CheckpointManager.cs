@@ -6,51 +6,43 @@ public class CheckpointManager : MonoBehaviour
 {
     [SerializeField] List<Transform> carList;
     [SerializeField] List<int> nextCheckpointList;
+
+
     List<Checkpoint> checkpoints;
 
-    // Start is called before the first frame update
     void Start()
     {
         checkpoints = new List<Checkpoint>();
         foreach (Transform child in transform)
         {
-            Debug.Log("Checkpoint");
             checkpoints.Add(child.GetComponent<Checkpoint>());
             child.GetComponent<Checkpoint>().SetCheckpoints(this);
 
         }
         nextCheckpointList = new List<int>();
-        ResetIndexes();
-
+        ResetIndexes(null);
     }
 
-    // Update is called once per frame
-    void Update()
-    {
-
-    }
 
     public void CarThroughCheckpoint(Checkpoint checkpoint, Transform carTransform)
     {
         int nextCheckpointIndex = nextCheckpointList[carList.IndexOf(carTransform)];
         if (checkpoints.IndexOf(checkpoint) == nextCheckpointIndex)
         {
-            Debug.Log("Correct");
             nextCheckpointIndex = (nextCheckpointIndex + 1) % checkpoints.Count;
             nextCheckpointList[carList.IndexOf(carTransform)] = nextCheckpointIndex;
-            carList[(carList.IndexOf(carTransform))].GetComponent<CarScript>().AddReward(50.0f);
+            carList[(carList.IndexOf(carTransform))].GetComponent<CarScript>().AddReward(5.0f);
         }
         else
         {
-            Debug.Log("Wrong");
             carList[(carList.IndexOf(carTransform))].GetComponent<CarScript>().AddReward(-100.0f);
             carList[(carList.IndexOf(carTransform))].GetComponent<CarScript>().EndEpisode();
-
             nextCheckpointList[carList.IndexOf(carTransform)] = 0;
+            ResetIndexes(carTransform);
         }
     }
 
-    public void ResetIndexes()
+    public void ResetIndexes(Transform carTransform)
     {
         if (nextCheckpointList.Count != carList.Count)
         {
@@ -61,10 +53,7 @@ public class CheckpointManager : MonoBehaviour
         }
         else
         {
-            for(int i=0; i< nextCheckpointList.Count; i++)
-            {
-                nextCheckpointList[i] = 0;
-            }
+            nextCheckpointList[carList.IndexOf(carTransform)] = 0;
         }
     }
 
