@@ -1,5 +1,0 @@
-\pi_*(a, s)=\begin{cases}
-    1 & \text{jeżeli } a= argmax_{a\in A} q_*(s, a)
-\\
-    0,              & \text{w przeciwnym wypadku}
-\end{cases}
